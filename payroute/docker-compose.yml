@@ -1,0 +1,52 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: payroute-postgres
+    environment:
+      POSTGRES_DB: payroute
+      POSTGRES_USER: ${DATABASE_USER:-payroute}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-payroute}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payroute"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: payroute-backend
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/payroute
+      DATABASE_USER: ${DATABASE_USER:-payroute}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-payroute}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
+      FX_QUOTE_TTL_MINUTES: ${FX_QUOTE_TTL_MINUTES:-5}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: payroute-frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:8080
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
